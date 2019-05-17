@@ -1,23 +1,35 @@
+/***************************************************
+  Adafruit MQTT Library ESP8266 Example
 
+  Must use ESP8266 Arduino from:
+    https://github.com/esp8266/Arduino
+
+  Works great with Adafruit's Huzzah ESP board & Feather
+  ----> https://www.adafruit.com/product/2471
+  ----> https://www.adafruit.com/products/2821
+
+  Adafruit invests time and resources providing this open source code,
+  please support Adafruit and open-source hardware by purchasing
+  products from Adafruit!
+
+  Written by Tony DiCola for Adafruit Industries.
+  MIT license, all text above must be included in any redistribution
+ ****************************************************/
 #include <ESP8266WiFi.h>
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
-#define OUTPUT_RELAY1 D0
-#define OUTPUT_RELAY2 D1
-#define OUTPUT_RELAY3 D2
-#define OUTPUT_RELAY4 D3
-int num;
+
 /************************* WiFi Access Point *********************************/
 
-#define WLAN_SSID       "Server786"
-#define WLAN_PASS       "Devil@007"
+#define WLAN_SSID       "...your SSID..."
+#define WLAN_PASS       "...your password..."
 
 /************************* Adafruit.io Setup *********************************/
 
 #define AIO_SERVER      "io.adafruit.com"
 #define AIO_SERVERPORT  1883                   // use 8883 for SSL
-#define AIO_USERNAME    "sahnivarun007"
-#define AIO_KEY         "1a56d61c87454491a557f54524f1f3b0"
+#define AIO_USERNAME    "...your AIO username (see https://accounts.adafruit.com)..."
+#define AIO_KEY         "...your AIO key..."
 
 /************ Global State (you don't need to change this!) ******************/
 
@@ -27,19 +39,16 @@ WiFiClient client;
 //WiFiClientSecure client;
 
 // Setup the MQTT client class by passing in the WiFi client and MQTT server and login details.
-//Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 
 /****************************** Feeds ***************************************/
 
-// Setup a feed called 'photocell' for publishing.
+// Setup a feed called 'potValue' for publishing.
 // Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
-//Adafruit_MQTT_Publish photocell = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/photocell");
+Adafruit_MQTT_Publish potValue = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/potValue");
 
-// Setup a feed called 'onoff' for subscribing to changes.
-Adafruit_MQTT_Subscribe Relay1 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/relay1");
-Adafruit_MQTT_Subscribe Relay2 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/relay2");
-Adafruit_MQTT_Subscribe Relay3 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/relay3");
-Adafruit_MQTT_Subscribe Relay4 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/relay4");
+// Setup a feed called 'ledBrightness' for subscribing to changes.
+Adafruit_MQTT_Subscribe ledBrightness = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/ledBrightness");
 
 /*************************** Sketch Code ************************************/
 
@@ -47,15 +56,14 @@ Adafruit_MQTT_Subscribe Relay4 = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/f
 // for some reason (only affects ESP8266, likely an arduino-builder bug).
 void MQTT_connect();
 
+uint8_t ledPin = D6;
+uint16_t potAdcValue = 0;
+uint16_t ledBrightValue = 0;
+
 void setup() {
-  pinMode(16,OUTPUT);
-  pinMode(OUTPUT_RELAY1,OUTPUT);
-  pinMode(OUTPUT_RELAY2,OUTPUT);
-  pinMode(OUTPUT_RELAY3,OUTPUT);
-  pinMode(OUTPUT_RELAY4,OUTPUT);
   Serial.begin(9600);
   delay(10);
- 
+
   Serial.println(F("Adafruit MQTT demo"));
 
   // Connect to WiFi access point.
@@ -73,14 +81,9 @@ void setup() {
   Serial.println("WiFi connected");
   Serial.println("IP address: "); Serial.println(WiFi.localIP());
 
-  // Setup MQTT subscription for onoff feed.
-  mqtt.subscribe(&Relay1);
-   mqtt.subscribe(&Relay2);
-    mqtt.subscribe(&Relay3);
-     mqtt.subscribe(&Relay4);
+  // Setup MQTT subscription for ledBrightness feed.
+  mqtt.subscribe(&ledBrightness);
 }
-
-uint32_t x=0;
 
 void loop() {
   // Ensure the connection to the MQTT server is alive (this will make the first
@@ -92,44 +95,28 @@ void loop() {
   // try to spend your time here
 
   Adafruit_MQTT_Subscribe *subscription;
-  while ((subscription = mqtt.readSubscription(5000))) {
-    if (subscription == &Relay1) {
-      Serial.print(F("Got:_Relay1 "));
-      Serial.println((char *)Relay1.lastread);
-     num = atoi((char *)Relay1.lastread);
-      digitalWrite(16,num);
-    }
-        if (subscription == &Relay2) {
-      Serial.print(F("Got:_Relay2 "));
-      Serial.println((char *)Relay2.lastread);
-     num = atoi((char *)Relay2.lastread);
-      digitalWrite(16,num);
-    }
-        if (subscription == &Relay3) {
-      Serial.print(F("Got:_Relay3 "));
-      Serial.println((char *)Relay3.lastread);
-     num = atoi((char *)Relay3.lastread);
-      digitalWrite(16,num);
-          
-      if (subscription == &Relay4) {
-      Serial.print(F("Got:_Relay 4"));
-      Serial.println((char *)Relay4.lastread);
-     num = atoi((char *)Relay4.lastread);
-      digitalWrite(16,num);
-    }
+  while ((subscription = mqtt.readSubscription(200))) {
+    if (subscription == &ledBrightness) {
+      Serial.print(F("Got LED Brightness : "));
+      ledBrightValue = atoi((char *)ledBrightness.lastread);
+      Serial.println(ledBrightValue);
+      analogWrite(ledPin, ledBrightValue);
     }
   }
 
   // Now we can publish stuff!
-//  Serial.print(F("\nSending photocell val "));
-//  Serial.print(x);
-//  Serial.print("...");
-//  if (! photocell.publish(x++)) {
-//    Serial.println(F("Failed"));
-//  } else {
-//    Serial.println(F("OK!"));
-//  }
-
+  uint16_t AdcValue = analogRead(A0);
+  if((AdcValue > (potAdcValue + 7)) || (AdcValue < (potAdcValue - 7))){
+    potAdcValue = AdcValue;
+    Serial.print(F("Sending pot val "));
+    Serial.print(potAdcValue);
+    Serial.print("...");
+    if (! potValue.publish(potAdcValue)) {
+      Serial.println(F("Failed"));
+    } else {
+      Serial.println(F("OK!"));
+    }
+  }
   // ping the server to keep the mqtt connection alive
   // NOT required if you are publishing once every KEEPALIVE seconds
   /*
