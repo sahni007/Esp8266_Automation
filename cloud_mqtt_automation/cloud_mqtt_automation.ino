@@ -9,9 +9,16 @@ this code is working for 4 switches with MQTT lens and cloudmqtt
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-
-const char* ssid = "Xiaomi_7729";
-const char* password =  "9503632250amw";
+//needed for library
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>         //https://github.com/tzapu/WiFiManager
+#include <EEPROM.h>
+#define XBEE_DATA_LENGTH 8*2
+#define FALSE 0
+#define TRUE 1
+const char* ssid = "Xiaomi";
+const char* password =  "appansch";
 const char* mqttServer = "postman.cloudmqtt.com";
 const int mqttPort =  18086;
 const char* mqttUser = "ndlpnzdg";
@@ -25,15 +32,23 @@ const char* mqttPassword = "gToNyPhITSLf";
 #define OUTPUT_RELAY4 D3 
 
 
+//data related to external interrupt
+const int interruptPin = 0; //GPIO 0 (Flash Button) 
+volatile byte interruptCounter = 0;
+int numberOfInterrupts = 0;
+int HotSpotStartFlag = FALSE;
 
-#define XBEE_DATA_LENGTH 8*2
-#define FALSE 0
-#define TRUE 1
+
 
       unsigned char ServerDataReceivedBuffer[XBEE_DATA_LENGTH]="0";
       unsigned char tempServerDataReceivedBuffer[XBEE_DATA_LENGTH]="0";
       unsigned int ServerDataPosition=0;
       unsigned int ServerDataReceivedFlag = FALSE;
+
+unsigned long previousMillis = 0;        // will store last time LED was updated
+
+// constants won't change:
+const long interval = 5000;           // interval at which to blink (milliseconds)
 
 void copyServerDataReceiver();
 void applicationControl(char SwitchNumber, char switchState);
@@ -42,20 +57,37 @@ PubSubClient client(espClient);
 void setup() {
  
   Serial.begin(9600);
+   
    pinMode(OUTPUT_RELAY1,OUTPUT);
     pinMode(OUTPUT_RELAY2,OUTPUT);
       pinMode(OUTPUT_RELAY3,OUTPUT);
         pinMode(OUTPUT_RELAY4,OUTPUT);
-  WiFi.begin(ssid, password);
- 
-   while (WiFi.status() != WL_CONNECTED) {
-                      delay(500);
-                      Serial.print(".");
-                    }
-                    Serial.println();
-                  
-                    Serial.println("WiFi connected");
-                    Serial.println("IP address: "); Serial.println(WiFi.localIP());
+  pinMode(interruptPin, INPUT_PULLUP); 
+  attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, CHANGE); 
+
+  //wifi related data
+
+  /* Set ESP32 to WiFi Station mode */
+          WiFiManager wifiManager;
+         wifiManager.autoConnect("skybot");
+//  while (WiFi.status() != WL_CONNECTED) {
+//    delay(500);
+//    Serial.print(".");
+//  }
+//  Serial.println("WiFi Connected.");
+//  Serial.print("IP Address: ");
+//  Serial.println(WiFi.localIP());
+//   WiFi.begin(ssid, password);
+// 
+//   while (WiFi.status() != WL_CONNECTED) {
+//                      delay(500);
+//                      Serial.print(".");
+//                    }
+//                    Serial.println();
+//                  
+//                    Serial.println("WiFi connected");
+//                    Serial.println("IP address: "); 
+//                    Serial.println(WiFi.localIP());
  
   client.setServer(mqttServer, mqttPort);
   client.setCallback(callback);
@@ -74,13 +106,17 @@ void setup() {
       delay(2000);
  
     }
-  }
+
+}
  
   client.publish("esp/auto", "Hello from ESP8266");
   client.subscribe("esp/auto");
  
 }
- 
+ void handleInterrupt() {
+  Serial.println("Interrupt_Detected");
+  interruptCounter++;
+}
 void callback(char* topic, byte* payload, unsigned int length) {
  
   Serial.print("Message arrived in topic: ");
@@ -96,9 +132,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
     {
       ServerDataReceivedFlag = TRUE;
       ServerDataPosition = 0;
-      copyServerDataReceiver();
+   //   copyServerDataReceiver();
        // Serial.write(tempServerDataReceivedBuffer[1]);Serial.write(tempServerDataReceivedBuffer[2]);
-      applicationControl(tempServerDataReceivedBuffer[1],tempServerDataReceivedBuffer[2]); ///pass switch_lsb and switch_state
+   //   applicationControl(tempServerDataReceivedBuffer[1],tempServerDataReceivedBuffer[2]); ///pass switch_lsb and switch_state
      
     //  Serial.println("DataReceived");
     }
@@ -107,21 +143,21 @@ void callback(char* topic, byte* payload, unsigned int length) {
  
   Serial.println();
   Serial.println("-----------------------");
-//     if(ServerDataReceivedFlag == TRUE){
-//     ServerDataReceivedFlag = FALSE;Serial.println("OK");
-//     Serial.write(ServerDataReceivedBuffer[0]);Serial.write(ServerDataReceivedBuffer[1]);
-//    if(ServerDataReceivedBuffer[0] == '(')
-//    {
-//      Serial.println("MAIN");
-//      copyServerDataReceiver();
-//      Serial.write(tempServerDataReceivedBuffer[0]);Serial.write(tempServerDataReceivedBuffer[0]);
-//    }
-//  }
+
 }
  
 void loop() {
 
     client.loop();
+     if(ServerDataReceivedFlag == TRUE){
+     ServerDataReceivedFlag = FALSE;
+     if(ServerDataReceivedBuffer[0] == '%' && ServerDataReceivedBuffer[1] == '%' && ServerDataReceivedBuffer[14]== '@'){
+     //Serial.println("OK");
+      copyServerDataReceiver();
+    // Serial.write(tempServerDataReceivedBuffer[1]);Serial.write(tempServerDataReceivedBuffer[2]);
+      applicationControl(tempServerDataReceivedBuffer[1],tempServerDataReceivedBuffer[2]);
+     }
+  }
 
 }
 
